@@ -1,0 +1,177 @@
+/* ================================
+   Input Row (Label + Input)
+   ================================ */
+.input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 6px; /* spacing between label and input */
+  box-sizing: border-box;
+  
+
+  /* --------------------------
+     Label column
+     -------------------------- */
+  .label-cell {
+    flex: 0 0 var(--label-width, 160px); 
+    text-align: right;
+    font-weight: 500;
+    font-size: 14px;
+    color: #333;
+    white-space: nowrap;
+    margin-right: 6px;
+  }
+
+  /* --------------------------
+     Input wrapper column
+     -------------------------- */
+  .input-wrapper {
+    flex: 1 1 auto; /* take remaining space */
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 6px;
+    min-width: 0;
+    box-sizing: border-box;
+	position: relative; /* <-- add this */
+
+    /* === Input field === */
+    .input-box {
+      flex: 1; /* fill input wrapper */
+      width: 100%;
+      padding: 8px 70px 8px 8px; /* room for spinner + clear */
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      min-width: 0;
+      font-size: 14px;
+      transition: border-color 0.2s ease;
+
+      &:focus {
+        outline: none;
+        border-color: #0078d7;
+      }
+
+      &:disabled {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+        color: #6c757d;
+      }
+    }
+
+    /* --- Clear button and spinner share absolute area --- */
+    .clear-btn,
+    .spinner-container {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+
+    /* --- Clear button --- */
+    .clear-btn {
+      padding: 0;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 1em;
+      line-height: 1;
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+
+    /* --- Spinner container --- */
+    .spinner-container {
+      width: 24px;
+      height: 24px;
+      pointer-events: none;
+      animation: fadeIn 0.2s ease-in-out;
+
+      app-spinner {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        .spinner {
+          width: 70%;
+          height: 70%;
+          border-width: 0.12em;
+          border-style: solid;
+          border-color: #f3f3f3;
+          border-top-color: #3f51b5;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          box-sizing: border-box;
+        }
+      }
+    }
+
+    /* === LTR layout === */
+    :host-context([dir='ltr']) &,
+    &[dir='ltr'] {
+      .spinner-container {
+        right: 36px;
+        left: auto;
+      }
+
+      .clear-btn {
+        right: 8px;
+        left: auto;
+      }
+
+      .input-box {
+        text-align: left;
+        padding-right: 70px;
+        padding-left: 8px;
+      }
+    }
+
+    /* === RTL layout === */
+    :host-context([dir='rtl']) &,
+    &[dir='rtl'] {
+      .spinner-container {
+        left: 36px;
+        right: auto;
+      }
+
+      .clear-btn {
+        left: 8px;
+        right: auto;
+      }
+
+      .input-box {
+        text-align: right;
+        padding-left: 70px;
+        padding-right: 8px;
+      }
+    }
+  }
+}
+
+/* --- Spinner rotation --- */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* --- Smooth fade-in for spinner --- */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-50%) scale(0.9); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+/* --- No label, input full width --- */
+:host-context([labeled='false']) .input-row .input-wrapper {
+  flex: 1 1 100%;
+  margin-left: 0;
+  margin-right: 0;
+}

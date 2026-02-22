@@ -1,0 +1,197 @@
+
+.component-layout1 {
+	border: solid 15px black;
+  height: 100%;
+  display: flex;
+ // display:block;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.search-bar1 {
+  flex: 0 0 10%;
+   box-sizing: border-box;
+   border: solid 10px black;
+}
+
+.tree-main1 {
+  flex: 1 1 90%;
+   box-sizing: border-box;
+   border: solid 10px #80003e;
+   display:block;
+   overflow:hidden;
+   height:100%;
+    min-height: 0;
+  min-width: 0;
+}
+.tree-main1.svg-chart-container{
+ box-sizing: border-box;
+   border: solid 10px #80003e;
+   display:block;
+   overflow:hidden;
+   height:100%;
+}
+
+.svg-chart-container {
+  //width: 100% !important;
+  //height: 100% !important;
+  //display: block;
+   border: solid 15px green  !important;
+}
+
+.org-wrapper {
+
+}
+
+.svg-container {
+display:block;
+  flex: 1 1 auto;
+ // min-height: 0;   /* 🔥 CRITICAL */
+  //overflow: hidden;
+ //  height: 100%;
+}
+
+
+/* org-tree.component.css (or your component .css) */
+
+/* Scope styles so they won't leak to the app */
+:host {
+  --bg: #f5f3ef;
+  --card: #ffffff;
+  --ink: #1f1f1f;
+  --muted: #5d5d5d;
+  --accent: #d98c2b;
+  --ring: rgba(0, 0, 0, 0.08);
+  --avatar-max: 72px;
+}
+
+* { box-sizing: border-box; }
+
+/* Card */
+.card {
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px var(--ring);
+  padding-inline: 10px;
+  padding-block: 10px;
+
+  display: grid;
+  grid-template-columns: minmax(0, var(--avatar-max)) 1fr;
+  gap: 8px;
+  align-items: stretch;
+  overflow: hidden;
+
+  /* LTR/RTL support */
+  direction: inherit; /* inherits from dir="auto" on .card */
+}
+
+/* Highlight state (replaces inline highlight logic) */
+.card.is-highlight {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 3px rgba(217, 140, 43, 0.25), 0 12px 30px var(--ring);
+}
+
+.avatar-box {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-inline: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: var(--avatar-max);
+  max-height: var(--avatar-max);
+}
+
+.avatar {
+  width: min(100%, 72px);
+  height: min(100%, 72px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  border: 2px dashed #cfc4b8;
+  background: linear-gradient(135deg, #f2e9df 0%, #f8f2eb 45%, #f2e9df 100%);
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.meta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.role {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.subordinates {
+  font-size: 11px;
+  color: var(--muted);
+  direction: inherit;
+  text-align: start;
+}
+
+.badges {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.badge {
+  font-size: 10px;
+  padding: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink);
+  border: 1px solid transparent;
+  width: 100%;
+  text-align: start;
+
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/* Keep top lines single-line like your template */
+.name,
+.role,
+.subordinates {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* RTL/LTR correctness for mixed text */
+.meta bdi {
+  direction: inherit;
+  unicode-bidi: plaintext;
+}
+
+.name,
+.role,
+.subordinates,
+.badge {
+  text-align: start;
+}

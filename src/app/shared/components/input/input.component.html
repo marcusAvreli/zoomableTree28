@@ -1,0 +1,40 @@
+<div class="input-row" [attr.dir]="dir">
+  <!-- Label cell -->
+  <app-label
+    *ngIf="labeled"
+    [text]="label"
+    [dir]="dir"
+    class="label-cell">
+  </app-label>
+
+
+<div class="input-wrapper" [attr.dir]="direction">
+  <input
+    type="text"
+    class="input-box"
+    [placeholder]="placeholder"
+    [value]="value"
+    (input)="onInput($event)"
+    [readonly]="readonly"
+      [disabled]="disabled"
+    (keydown.enter)="$event.preventDefault()"
+    (blur)="onBlur()"
+    (click)="onInputClick($event)"
+  />
+ 
+  <div class="spinner-container" *ngIf="waitable && loading">
+    <app-spinner [show]="true"></app-spinner>
+  </div>
+
+  <button
+    variant="clear"
+  
+     type="button"
+    (click)="clearFromMouse()"
+    class="clear-btn"
+    *ngIf="!disabled && value"
+  >
+    ✖
+  </button>
+</div>
+</div>

@@ -1,0 +1,9 @@
+<button
+  class="app-btn"
+  [ngClass]="buttonClasses"
+  [disabled]="disabled"
+  (click)="handleClick($event)"
+>
+  {{ !iconOnly ? label : '' }}
+  <ng-content></ng-content>
+</button>

@@ -1,0 +1,35 @@
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { ReactiveFormsModule, FormsModule } from '@angular/forms';
+import { SharedModule } from './shared/shared.module';
+import { AppComponent } from './app.component';
+import { OrgTreeContainerComponent } from './containers/org-tree-container/org-tree-container.component';
+import { OrgTreeMainComponent } from './components/org-tree/org-tree-main/org-tree-main.component';
+import { OrgTreeTitleComponent } from './components/org-tree/org-tree-title/org-tree-title.component';
+import { CoreModule } from './core/core.module';
+import { CONFIG } from '../app-config';
+import { MainContainerComponent } from './containers/main-container/main-container.component';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    OrgTreeContainerComponent,
+	    OrgTreeTitleComponent,
+    OrgTreeMainComponent,
+    MainContainerComponent
+	
+  ],
+  imports: [
+	BrowserModule
+	,ReactiveFormsModule
+	,FormsModule
+	,SharedModule
+	 , CoreModule.forRoot({
+      ...CONFIG,
+      logger: { level: 'debug' } // dynamically set logging level
+	  })
+  ],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }

@@ -1,0 +1,49 @@
+<div class="org-wrapper">
+
+
+<app-dropdown
+  *ngIf="managerDropdownOptions.length"
+  [label]="'Manager'"
+  [options]="managerDropdownOptions"
+  [valueField]="'id'"
+  [displayField]="'displayName'"
+  [multiple]="false"
+  [formGroup]="dropdownForm"
+  [controlName]="'managerId'"
+  [orientation]="'vertical'"
+  [typeable]="false"
+  [dir]="'ltr'"
+  (selectItem)="onManagerDropdownSelect($event)"
+>
+</app-dropdown>
+
+<app-button
+  *ngIf="selectedManagerId"
+  label="Clear filter"
+  variant="primary"
+  size="medium"
+  (clicked)="clearManagerFilter()">
+</app-button>
+
+<app-button
+  label="Export SVG"
+  variant="primary"
+  size="medium"
+  (clicked)="exportSvg()">
+</app-button>
+
+<app-button
+  label="Export PNG"
+  variant="primary"
+  size="medium"
+  (clicked)="exportPng()">
+</app-button>
+<div style=" font-size: 14px; color: #333;">
+  Total nodes registered: {{ nodeMapSize }}
+</div>
+<div style="display:flex;border:solid 15px green; height:100vh;">
+
+    <div #chartContainer class="svg-container"></div>
+
+	</div>
+	</div>

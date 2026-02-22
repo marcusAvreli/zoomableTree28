@@ -1,0 +1,40 @@
+
+<div class="component-layout" dir="rtl">
+    <div class="search-bar" dir="rtl" >
+ 
+	  <app-dropdown
+  [label]="'Field'"
+  [options]="searchFieldOptions"
+  [valueField]="'value'"
+  [displayField]="'displayName'"
+  [multiple]="false"
+  [formGroup]="searchForm"
+  [controlName]="'searchField'"
+  [orientation]="'vertical'"
+  [typeable]="false"
+  [dir]="'ltr'"
+  (selectItem)="onSearchFieldSelected($event)">
+</app-dropdown>
+     <app-input
+  [label]="'Search'"
+  [labeled]="false"
+  [placeholder]="'search term'"
+  [waitable]="false"
+  [readonly]="false"
+  [dir]="'ltr'"
+  [formControl]="searchForm.controls.searchTerm"></app-input>
+<app-button
+  label="Search"
+  variant="primary"
+  size="medium"
+  [disabled]="!canSearch"
+  (clicked)="triggerSearch()">
+</app-button>
+    </div>
+
+    <app-org-tree class="tree-main"
+      [state$]="chartState$"
+      (search$)="handleSearch($event)">
+    </app-org-tree>
+	</div>
+ 

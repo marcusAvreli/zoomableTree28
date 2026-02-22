@@ -1,0 +1,5 @@
+<div class="list">
+  <div class="list-item" *ngFor="let item of items" (click)="selectItem(item, $event)">
+    {{ item[displayField] ?? item }}
+  </div>
+</div>

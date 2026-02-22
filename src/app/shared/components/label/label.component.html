@@ -1,0 +1,21 @@
+<label
+  class="app-label"
+  [attr.for]="forId"
+  [class.inline]="layout === 'inline'"
+  [class.required]="required"
+  [ngStyle]="fontStyle"
+>
+  <div class="label-main">
+    <span class="label-key">
+      {{ text }}
+      <span *ngIf="required" class="required-mark">*</span>
+    </span>
+
+    <span *ngIf="value" class="label-value">: {{ value }}</span>
+  </div>
+
+  <!-- projected children (if any) -->
+  <ng-content></ng-content>
+
+  <span *ngIf="hint" class="hint">{{ hint }}</span>
+</label>

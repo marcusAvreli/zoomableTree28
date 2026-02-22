@@ -1,0 +1,40 @@
+<div #dropdownRef class="form-row">
+  <label>{{ label }}</label>
+
+  <div class="form-input dropdown" (click)="toggleDropdown()">
+    <!-- Reusable input component -->
+  <app-input
+    *ngIf="label"
+    [label]="label"
+     [waitable]="true"
+    [labeled]="false"
+    [placeholder]="'Select ' + label"
+    [value]="selectedText"
+    [readonly]="!typeable"
+    [bindToDropdownId]="dropdownId"
+    [dir]="dir"
+    (inputChange)="onInputChange($event)"
+    (clicked)="toggleDropdown()"
+    (cleared)="clearSelection()"
+  >
+  </app-input>
+
+    <!-- Vertical dropdown list -->
+    <app-list
+      *ngIf="isOpen"
+      [items]="displayOptions"
+      [displayField]="displayField"
+      (itemSelected)="onItemSelected($event)"
+    >
+    </app-list>
+
+    <!-- Horizontal multi-select: show selected items as pills -->
+    <div *ngIf="orientation === 'horizontal' && multiple" class="horizontal-selected">
+      <span class="pill" *ngFor="let item of getSelectedItems()">
+        {{ item[displayField] }}
+      </span>
+    </div>
+  </div>
+
+  <div *ngIf="control?.invalid && control?.touched" class="error">{{ label }} is required</div>
+</div>

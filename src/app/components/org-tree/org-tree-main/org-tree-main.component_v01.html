@@ -1,0 +1,18 @@
+
+<div class="component-layout">
+    <div class="search-bar">
+      <select [(ngModel)]="searchField">
+        <option value="">-- select field --</option>
+        <option *ngFor="let f of availableFields" [value]="f">{{ f }}</option>
+      </select>
+	  
+      <input type="text" [(ngModel)]="searchTerm" placeholder="search term" />
+      <button (click)="triggerSearch()">Search</button>
+    </div>
+
+    <app-org-tree class="tree-main"
+      [state$]="chartState$"
+      (search$)="handleSearch($event)">
+    </app-org-tree>
+	</div>
+ 

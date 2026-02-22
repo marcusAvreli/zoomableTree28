@@ -1,0 +1,76 @@
+.form-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+  min-width: 0;
+
+  label {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+  }
+
+  .form-input.dropdown {
+    position: relative; /* 🔑 anchor for absolute dropdown */
+    width: 100%;
+    min-width: 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+
+    &:hover {
+      border-color: #007bff;
+    }
+
+    app-input {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* --- Dropdown list --- */
+    app-list {
+      position: absolute; /* float above form */
+      top: calc(100% + 4px); /* place below input */
+      left: 0;
+      width: 100%;
+      max-height: 240px; /* limit height */
+      overflow-y: auto;
+      z-index: 2000; /* ensure above form */
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Pills for multiple selections */
+    .horizontal-selected {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+
+      .pill {
+        padding: 4px 8px;
+        background: #007bff;
+        color: #fff;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+      }
+    }
+  }
+
+  .error {
+    color: #dc3545;
+    font-size: 0.85rem;
+    margin-top: 4px;
+    min-width: 0;
+  }
+}

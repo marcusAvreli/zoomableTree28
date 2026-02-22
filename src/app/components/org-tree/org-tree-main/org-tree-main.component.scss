@@ -1,0 +1,140 @@
+/*
+.component-layout {
+	border: solid 15px black;
+ 
+  display: flex;
+
+  flex-direction: column;
+ 
+}
+
+.search-bar {
+  flex: 0 0 10%;
+  
+   border: solid 10px black;
+}
+
+.tree-main {
+  flex: 1 1 90%;
+ 
+   border: solid 10px #80003e;
+
+   height:100vh;
+}
+
+*/
+/*
+.component-layout{
+  border: solid 15px black;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 
+.search-bar{
+  border: solid 10px black;
+
+  display: flex;
+  flex-direction: row;
+  align-items: center;     
+  gap: 12px;
+  flex-wrap: nowrap;
+
+ 
+  direction: inherit;
+
+ 
+  padding: 8px;
+}
+
+
+.search-bar app-dropdown,
+.search-bar app-input{
+  flex: 1 1 0;
+  min-width: 180px;
+}
+
+.search-bar app-button{
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+
+@media (max-width: 700px){
+  .search-bar{
+    flex-wrap: wrap;
+  }
+  .search-bar app-dropdown,
+  .search-bar app-input{
+    flex: 1 1 100%;
+  }
+  .search-bar app-button{
+    flex: 0 0 auto;
+    margin-inline-start: auto; 
+  }
+}
+
+.tree-main{
+  flex: 1 1 auto;
+  border: solid 10px #80003e;
+  height: 100vh;
+}
+*/
+
+.component-layout{
+  border: solid 15px black;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ROW */
+.search-bar{
+  border: solid 10px black;
+  padding: 8px;
+
+  display: flex;
+  flex-wrap: wrap;            /* ✅ responsive by default */
+  align-items: center;
+  gap: 12px;
+
+  direction: inherit;         /* ✅ rtl/ltr follows nearest dir */
+}
+
+/* Make custom elements behave consistently in flex */
+.search-bar > app-dropdown,
+.search-bar > app-input,
+.search-bar > app-button{
+  display: block;             /* avoids baseline/inline quirks */
+  min-inline-size: 160px;     /* logical min-width for rtl/ltr */
+}
+
+/* Dropdown + input grow */
+.search-bar > app-dropdown,
+.search-bar > app-input{
+  flex: 1 1 260px;            /* grow, shrink, preferred size */
+}
+
+/* Button stays natural width and goes to the line end when wrapped */
+.search-bar > app-button{
+  flex: 0 0 auto;
+  white-space: nowrap;
+
+  /* ✅ push to the end of the row in BOTH rtl/ltr */
+  margin-inline-start: auto;
+}
+
+/* Optional: on wide screens keep everything on one line */
+@media (min-width: 900px){
+  .search-bar{
+    flex-wrap: nowrap;
+  }
+  .search-bar > app-button{
+    margin-inline-start: 0;   /* no need to push when nowrap */
+  }
+}
+
+.tree-main{
+  flex: 1 1 auto;
+  border: solid 10px #80003e;
+  height: 100vh;
+}
