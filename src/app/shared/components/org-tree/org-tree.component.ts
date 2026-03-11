@@ -253,7 +253,7 @@ if (highlightedIds?.size) {
 }
 console.log("directSiblingsByManager:",this.directSiblingsByManager);
     if (!this.initialized) {
-		this.nodeMap = new Map<string, any>();
+		
       this.chart
         ['container'](this.chartContainer.nativeElement)
       
@@ -261,28 +261,57 @@ console.log("directSiblingsByManager:",this.directSiblingsByManager);
 	
 		.parentNodeId((d: any) => d.parentId ?? null)
         .hasChildren((d: any) => d.hasChildren)
-       .loadChildren((d: any) =>
-  new Promise<any[]>((resolve) => {
 
-    const realId =
-      d._key === state.root._key
-        ? state.root.id
-        : d.id;
+.loadChildren((d: any) =>
+  new Promise<any[]>((resolve) => {
+	console.log("checkPost:", d._key, d.id);
+    const syntheticRootId = state.rootKey || 'root';
+	
+	
+	
+	
+    const rootDbId = String(
+      (this.nodeMap.get(syntheticRootId) as any)?._key ?? state.root.id
+    );
+
+		const isRoot = d.parentId == null;
+
+const realId = isRoot
+  ? rootDbId          // always DB id for root
+  : String(d.id);     // others already DB ids
+		
+		
 
     loadChildren$({ ...d, id: realId })
       .pipe(take(1))
       .subscribe((children) => {
 
         children.forEach((c) => {
-          c._key = String(c.id);
-          this.nodeMap.set(c._key, c);
+          const id = String(c.id);
+
+          const normalizedParentId =
+            String(c.managerId) === String(rootDbId)
+              ? syntheticRootId
+              : (c.managerId ? String(c.managerId) : null);
+
+          // keep real id in _key, but DO NOT use _key as map key
+          const normalized = {
+            ...c,
+            id,
+            _key: id,                 // or String(c.id) (real id)
+            parentId: normalizedParentId
+          };
+console.log("normalized:",normalized);
+          this.nodeMap.set(id, normalized);  // ✅ stable keys
         });
- console.log("this.nodeMap.values()1:",this.nodeMap.values());
+
         resolve(children);
         this.updateNodeMapCount();
       });
   })
-)['buttonContent']((d: any) => {
+)
+
+['buttonContent']((d: any) => {
         const isExpanded = !!d.node.children;
         const hasChildren = d.node.data.hasChildren;
         return `
@@ -548,6 +577,7 @@ clearManagerFilter() {
   a.click();
   URL.revokeObjectURL(url);
 }
+/*
 exportPng(filename = 'org-chart.png') {
   const container: HTMLElement = this.chartContainer.nativeElement;
   const svg = container.querySelector('svg') as SVGSVGElement;
@@ -628,7 +658,1039 @@ exportPng(filename = 'org-chart.png') {
 
   bg.onerror = e => console.error('Background image load failed', e);
 }
+*/
+/*
+exportPng(filename = 'org-chart.png') {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
 
+  console.log('foreignObject count:', svg.querySelectorAll('foreignObject').length);
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = svg.clientWidth || 1200;
+    canvas.height = svg.clientHeight || 800;
+
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+*/
+/*
+exportPng(filename = 'org-chart.png', padding = 40) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+
+  // find visible chart nodes on the LIVE svg
+  const nodeGroups = Array.from(svg.querySelectorAll('g.node')) as SVGGElement[];
+  if (!nodeGroups.length) {
+    console.error('No chart nodes found');
+    return;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const node of nodeGroups) {
+    try {
+      const box = node.getBBox();
+      minX = Math.min(minX, box.x);
+      minY = Math.min(minY, box.y);
+      maxX = Math.max(maxX, box.x + box.width);
+      maxY = Math.max(maxY, box.y + box.height);
+    } catch (e) {
+      console.warn('getBBox failed for node', e);
+    }
+  }
+
+  // also include links
+  const links = Array.from(
+    svg.querySelectorAll('path.link, g.link path, .links path, .link')
+  ) as SVGGraphicsElement[];
+
+  for (const link of links) {
+    try {
+      const box = link.getBBox();
+      minX = Math.min(minX, box.x);
+      minY = Math.min(minY, box.y);
+      maxX = Math.max(maxX, box.x + box.width);
+      maxY = Math.max(maxY, box.y + box.height);
+    } catch {}
+  }
+
+  if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+    console.error('Failed to calculate tree bounds');
+    return;
+  }
+
+  // expand bounds a bit so nodes are not cut
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
+
+  const treeWidth = maxX - minX;
+  const treeHeight = maxY - minY;
+
+  // preserve original svg attributes
+  const originalViewBox = svg.getAttribute('viewBox');
+  const originalWidth = svg.getAttribute('width');
+  const originalHeight = svg.getAttribute('height');
+  const originalPreserveAspectRatio = svg.getAttribute('preserveAspectRatio');
+
+  // make export focus only on tree area
+  svg.setAttribute('viewBox', `${minX} ${minY} ${treeWidth} ${treeHeight}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+
+  // restore immediately after serialization
+  if (originalViewBox !== null) svg.setAttribute('viewBox', originalViewBox);
+  else svg.removeAttribute('viewBox');
+
+  if (originalWidth !== null) svg.setAttribute('width', originalWidth);
+  else svg.removeAttribute('width');
+
+  if (originalHeight !== null) svg.setAttribute('height', originalHeight);
+  else svg.removeAttribute('height');
+
+  if (originalPreserveAspectRatio !== null) {
+    svg.setAttribute('preserveAspectRatio', originalPreserveAspectRatio);
+  } else {
+    svg.removeAttribute('preserveAspectRatio');
+  }
+console.log(
+  'nodes:',
+  svg.querySelectorAll('g.node').length,
+  'links:',
+  svg.querySelectorAll('path.link, g.link path, .links path, .link').length
+);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+*/
+
+
+/*
+exportPng(filename = 'org-chart.png', maxScale = 3, margin = 20) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const svgBox = svg.getBoundingClientRect();
+
+    const elements = [
+      ...Array.from(svg.querySelectorAll('g.node')),
+      ...Array.from(svg.querySelectorAll('path.link, g.link path, .links path, .link'))
+    ] as Element[];
+
+    if (!elements.length) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const el of elements) {
+      try {
+        const box = el.getBoundingClientRect();
+        if (!box.width && !box.height) continue;
+
+        const x = box.left - svgBox.left;
+        const y = box.top - svgBox.top;
+        const w = box.width;
+        const h = box.height;
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+      } catch (e) {
+        console.warn('Failed measuring element rect', e);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+
+    if (treeWidth <= 0 || treeHeight <= 0) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    const treeCx = minX + treeWidth / 2;
+    const treeCy = minY + treeHeight / 2;
+    const canvasCx = width / 2;
+    const canvasCy = height / 2;
+
+    const fitScaleX = (width - margin * 2) / treeWidth;
+    const fitScaleY = (height - margin * 2) / treeHeight;
+    const autoScale = Math.min(fitScaleX, fitScaleY);
+    const finalScale = Math.max(0.1, Math.min(autoScale, maxScale));
+
+    const drawTree = () => {
+      ctx.save();
+      ctx.translate(canvasCx, canvasCy);
+      ctx.scale(finalScale, finalScale);
+      ctx.translate(-treeCx, -treeCy);
+      ctx.drawImage(img, 0, 0, width, height);
+      ctx.restore();
+
+      this.downloadCanvas(canvas, filename);
+    };
+
+    // base white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+
+    // background image
+    const bg = new Image();
+    bg.onload = () => {
+      ctx.save();
+      ctx.globalAlpha = 0.15; // faded background
+      ctx.drawImage(bg, 0, 0, width, height);
+      ctx.restore();
+
+      drawTree();
+    };
+
+    bg.onerror = (e) => {
+      console.error('Background image failed to load', e);
+      drawTree();
+    };
+
+    bg.src = 'assets/background.png';
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+
+private downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+
+
+
+
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+/*
+async exportPng(filename = 'org-chart.png', maxScale = 3, margin = 20) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+
+  // Clone svg so live chart is untouched
+  const clonedSvg = svg.cloneNode(true) as SVGSVGElement;
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+  // Inline assets used inside foreignObject/html img tags
+  await this.inlineAssetsInSvg(clonedSvg, [
+    './assets/icon_male.png',
+    './assets/icon_female.png',
+    'assets/icon_male.png',
+    'assets/icon_female.png'
+  ]);
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(clonedSvg);
+
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const svgBox = svg.getBoundingClientRect();
+
+    const elements = [
+      ...Array.from(svg.querySelectorAll('g.node')),
+      ...Array.from(svg.querySelectorAll('path.link, g.link path, .links path, .link'))
+    ] as Element[];
+
+    if (!elements.length) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const el of elements) {
+      try {
+        const box = el.getBoundingClientRect();
+        if (!box.width && !box.height) continue;
+
+        const x = box.left - svgBox.left;
+        const y = box.top - svgBox.top;
+        const w = box.width;
+        const h = box.height;
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+      } catch (e) {
+        console.warn('Failed measuring element rect', e);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+
+    if (treeWidth <= 0 || treeHeight <= 0) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    const treeCx = minX + treeWidth / 2;
+    const treeCy = minY + treeHeight / 2;
+    const canvasCx = width / 2;
+    const canvasCy = height / 2;
+
+    const fitScaleX = (width - margin * 2) / treeWidth;
+    const fitScaleY = (height - margin * 2) / treeHeight;
+    const autoScale = Math.min(fitScaleX, fitScaleY);
+    const finalScale = Math.max(0.1, Math.min(autoScale, maxScale));
+
+    const drawTree = () => {
+      ctx.save();
+      ctx.translate(canvasCx, canvasCy);
+      ctx.scale(finalScale, finalScale);
+      ctx.translate(-treeCx, -treeCy);
+      ctx.drawImage(img, 0, 0, width, height);
+      ctx.restore();
+
+      this.downloadCanvas(canvas, filename);
+    };
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+
+    const bg = new Image();
+    bg.onload = () => {
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.drawImage(bg, 0, 0, width, height);
+      ctx.restore();
+
+      drawTree();
+    };
+
+    bg.onerror = (e) => {
+      console.error('Background image failed to load', e);
+      drawTree();
+    };
+
+    bg.src = 'assets/background.png';
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+
+private async inlineAssetsInSvg(svg: SVGSVGElement, assetPaths: string[]): Promise<void> {
+  const imgElements = Array.from(svg.querySelectorAll('img')) as HTMLImageElement[];
+  if (!imgElements.length) return;
+
+  const assetMap = new Map<string, string>();
+
+  // preload requested assets once and convert to data urls
+  await Promise.all(
+    assetPaths.map(async (path) => {
+      try {
+        const dataUrl = await this.urlToDataUrl(path);
+        assetMap.set(path, dataUrl);
+
+        // also map normalized absolute url so matches work even after browser expansion
+        const absolute = new URL(path, document.baseURI).href;
+        assetMap.set(absolute, dataUrl);
+      } catch (e) {
+        console.warn('Failed to inline asset', path, e);
+      }
+    })
+  );
+
+  for (const img of imgElements) {
+    const src = img.getAttribute('src') || '';
+    if (!src) continue;
+
+    const absoluteSrc = new URL(src, document.baseURI).href;
+    const dataUrl = assetMap.get(src) || assetMap.get(absoluteSrc);
+
+    if (dataUrl) {
+      img.setAttribute('src', dataUrl);
+    }
+  }
+}
+
+private async urlToDataUrl(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch asset: ${url}`);
+  }
+
+  const blob = await response.blob();
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to convert blob to data url'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+private downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+*/
+
+
+
+
+
+
+
+
+
+
+async exportPng(filename = 'org-chart.png', maxScale = 3, margin = 20) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+
+  const clonedSvg = svg.cloneNode(true) as SVGSVGElement;
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+  await this.inlineAssetsInSvg(clonedSvg, [
+    './assets/icon_male.png',
+    './assets/icon_female.png',
+    'assets/icon_male.png',
+    'assets/icon_female.png'
+  ]);
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(clonedSvg);
+
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const svgBox = svg.getBoundingClientRect();
+
+    const elements = [
+      ...Array.from(svg.querySelectorAll('g.node')),
+      ...Array.from(svg.querySelectorAll('path.link, g.link path, .links path, .link'))
+    ] as Element[];
+
+    if (!elements.length) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.drawWatermarkAndDownload(ctx, canvas, filename);
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const el of elements) {
+      try {
+        const box = el.getBoundingClientRect();
+        if (!box.width && !box.height) continue;
+
+        const x = box.left - svgBox.left;
+        const y = box.top - svgBox.top;
+        const w = box.width;
+        const h = box.height;
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+      } catch (e) {
+        console.warn('Failed measuring element rect', e);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.drawWatermarkAndDownload(ctx, canvas, filename);
+      return;
+    }
+
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+
+    if (treeWidth <= 0 || treeHeight <= 0) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      this.drawWatermarkAndDownload(ctx, canvas, filename);
+      return;
+    }
+
+    const treeCx = minX + treeWidth / 2;
+    const treeCy = minY + treeHeight / 2;
+    const canvasCx = width / 2;
+    const canvasCy = height / 2;
+
+    const fitScaleX = (width - margin * 2) / treeWidth;
+    const fitScaleY = (height - margin * 2) / treeHeight;
+    const autoScale = Math.min(fitScaleX, fitScaleY);
+    const finalScale = Math.max(0.1, Math.min(autoScale, maxScale));
+
+    const drawTree = () => {
+      ctx.save();
+      ctx.translate(canvasCx, canvasCy);
+      ctx.scale(finalScale, finalScale);
+      ctx.translate(-treeCx, -treeCy);
+      ctx.drawImage(img, 0, 0, width, height);
+      ctx.restore();
+
+      this.drawWatermarkAndDownload(ctx, canvas, filename);
+    };
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+
+    const bg = new Image();
+    bg.onload = () => {
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.drawImage(bg, 0, 0, width, height);
+      ctx.restore();
+
+      drawTree();
+    };
+
+    bg.onerror = (e) => {
+      console.error('Background image failed to load', e);
+      drawTree();
+    };
+
+    bg.src = 'assets/background.png';
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+
+private drawWatermarkAndDownload(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  filename: string
+) {
+  const watermark = new Image();
+  watermark.src = 'assets/avatar-placeholder.png';
+
+  watermark.onload = () => {
+    const padding = 10;
+    const wmWidth = 100;
+    const wmHeight = (watermark.height / watermark.width) * wmWidth;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // image watermark - top left
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(watermark, padding, padding, wmWidth, wmHeight);
+
+    // text watermark - bottom right
+    const text = 'בוקר טוב לצוות ניהול זהויות';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = 'rgba(0, 128, 0, 0.5)';
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'right';
+    ctx.fillText(text, canvas.width - padding, canvas.height - padding);
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    this.downloadCanvas(canvas, filename);
+  };
+
+  watermark.onerror = (e) => {
+    console.error('Watermark image failed to load', e);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    const padding = 10;
+    const text = 'בוקר טוב לצוות ניהול זהויות';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = 'rgba(0, 128, 0, 0.5)';
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'right';
+    ctx.fillText(text, canvas.width - padding, canvas.height - padding);
+
+    ctx.restore();
+
+    this.downloadCanvas(canvas, filename);
+  };
+}
+
+private async inlineAssetsInSvg(svg: SVGSVGElement, assetPaths: string[]): Promise<void> {
+  const imgElements = Array.from(svg.querySelectorAll('img')) as HTMLImageElement[];
+  if (!imgElements.length) return;
+
+  const assetMap = new Map<string, string>();
+
+  await Promise.all(
+    assetPaths.map(async (path) => {
+      try {
+        const dataUrl = await this.urlToDataUrl(path);
+        assetMap.set(path, dataUrl);
+
+        const absolute = new URL(path, document.baseURI).href;
+        assetMap.set(absolute, dataUrl);
+      } catch (e) {
+        console.warn('Failed to inline asset', path, e);
+      }
+    })
+  );
+
+  for (const img of imgElements) {
+    const src = img.getAttribute('src') || '';
+    if (!src) continue;
+
+    const absoluteSrc = new URL(src, document.baseURI).href;
+    const dataUrl = assetMap.get(src) || assetMap.get(absoluteSrc);
+
+    if (dataUrl) {
+      img.setAttribute('src', dataUrl);
+    }
+  }
+}
+
+private async urlToDataUrl(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch asset: ${url}`);
+  }
+
+  const blob = await response.blob();
+
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to convert blob to data url'));
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+private downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+
+
+
+
+
+
+
+
+
+
+
+/*
+exportPng(filename = 'org-chart.png', scale = 1.6) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+
+    // measure the rendered image bounds on the live SVG
+    const nodes = Array.from(svg.querySelectorAll('g.node')) as SVGGElement[];
+    if (!nodes.length) {
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const el of nodes) {
+      try {
+        const box = el.getBoundingClientRect();
+        const svgBox = svg.getBoundingClientRect();
+
+        const x = box.left - svgBox.left;
+        const y = box.top - svgBox.top;
+        const w = box.width;
+        const h = box.height;
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + w);
+        maxY = Math.max(maxY, y + h);
+      } catch (e) {
+        console.warn('Failed measuring node rect', e);
+      }
+    }
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      ctx.drawImage(img, 0, 0, width, height);
+      this.downloadCanvas(canvas, filename);
+      return;
+    }
+
+    const treeWidth = maxX - minX;
+    const treeHeight = maxY - minY;
+    const treeCx = minX + treeWidth / 2;
+    const treeCy = minY + treeHeight / 2;
+
+    const canvasCx = width / 2;
+    const canvasCy = height / 2;
+
+    ctx.save();
+
+    // center output on canvas, then enlarge around tree center
+    ctx.translate(canvasCx, canvasCy);
+    ctx.scale(scale, scale);
+    ctx.translate(-treeCx, -treeCy);
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    ctx.restore();
+
+    this.downloadCanvas(canvas, filename);
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+
+private downloadCanvas(canvas: HTMLCanvasElement, filename: string) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+*/
+/*exportPng(filename = 'org-chart.png', padding = 20) {
+  const svg = this.chartContainer.nativeElement.querySelector('svg') as SVGSVGElement;
+  if (!svg) return;
+
+  const width = svg.clientWidth || Number(svg.getAttribute('width')) || 1200;
+  const height = svg.clientHeight || Number(svg.getAttribute('height')) || 800;
+  const targetAspect = width / height;
+
+  const nodeGroups = Array.from(svg.querySelectorAll('g.node')) as SVGGElement[];
+  if (!nodeGroups.length) {
+    console.error('No chart nodes found');
+    return;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const node of nodeGroups) {
+    try {
+      const box = node.getBBox();
+      minX = Math.min(minX, box.x);
+      minY = Math.min(minY, box.y);
+      maxX = Math.max(maxX, box.x + box.width);
+      maxY = Math.max(maxY, box.y + box.height);
+    } catch (e) {
+      console.warn('getBBox failed for node', e);
+    }
+  }
+
+  const links = Array.from(
+    svg.querySelectorAll('path.link, g.link path, .links path, .link')
+  ) as SVGGraphicsElement[];
+
+  for (const link of links) {
+    try {
+      const box = link.getBBox();
+      minX = Math.min(minX, box.x);
+      minY = Math.min(minY, box.y);
+      maxX = Math.max(maxX, box.x + box.width);
+      maxY = Math.max(maxY, box.y + box.height);
+    } catch {}
+  }
+
+  if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+    console.error('Failed to calculate tree bounds');
+    return;
+  }
+
+  // tight tree bounds + padding
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
+
+  let boxWidth = maxX - minX;
+  let boxHeight = maxY - minY;
+
+  const cx = minX + boxWidth / 2;
+  const cy = minY + boxHeight / 2;
+
+  // Adjust export box to match image aspect ratio, while keeping center fixed
+  const currentAspect = boxWidth / boxHeight;
+
+  if (currentAspect > targetAspect) {
+    // tree area is wider than canvas ratio -> increase height
+    boxHeight = boxWidth / targetAspect;
+  } else {
+    // tree area is taller than canvas ratio -> increase width
+    boxWidth = boxHeight * targetAspect;
+  }
+
+  const exportMinX = cx - boxWidth / 2;
+  const exportMinY = cy - boxHeight / 2;
+
+  const originalViewBox = svg.getAttribute('viewBox');
+  const originalWidth = svg.getAttribute('width');
+  const originalHeight = svg.getAttribute('height');
+  const originalPreserveAspectRatio = svg.getAttribute('preserveAspectRatio');
+
+  svg.setAttribute('viewBox', `${exportMinX} ${exportMinY} ${boxWidth} ${boxHeight}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svg);
+
+  // restore svg immediately
+  if (originalViewBox !== null) svg.setAttribute('viewBox', originalViewBox);
+  else svg.removeAttribute('viewBox');
+
+  if (originalWidth !== null) svg.setAttribute('width', originalWidth);
+  else svg.removeAttribute('width');
+
+  if (originalHeight !== null) svg.setAttribute('height', originalHeight);
+  else svg.removeAttribute('height');
+
+  if (originalPreserveAspectRatio !== null) {
+    svg.setAttribute('preserveAspectRatio', originalPreserveAspectRatio);
+  } else {
+    svg.removeAttribute('preserveAspectRatio');
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  };
+
+  img.onerror = (e) => console.error('SVG image load failed', e);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+}
+*/
   /** ---------------- Node content ---------------- */
 
 private nodeContent(state: ChartState) {

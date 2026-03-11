@@ -10,6 +10,8 @@ import { Observable, of, firstValueFrom,BehaviorSubject, Subscription,filter,tak
 import { delay } from 'rxjs/operators';
 import domtoimage from 'dom-to-image';
 import {ChartState, SearchRequest,Employee } from './shared/contract';
+import { NODE_CARD_CONFIG } from '../../../core/models/ui/node-config.model';
+import { FormControl, FormGroup } from '@angular/forms';
 @Component({
   selector: 'app-org-tree',
    templateUrl: './org-tree.component.html',
@@ -36,7 +38,11 @@ public nodeMapSize = 0; // ← reactive property to display node count
   /** Component-level nodeMap (all known nodes) */
   private nodeMap = new Map<string, any>();
 
+public dropdownForm = new FormGroup({
+  managerId: new FormControl<string | null>(null),
+});
 
+public managerDropdownOptions: Array<{ id: string; displayName: string }> = [];
 
 
 ngAfterViewInit() {
@@ -107,6 +113,9 @@ this.nodeMap.set(nodeId, {
       this.directManagers.clear();
       this.directSiblingsByManager.clear();
       this.managerDropdownMap.clear();
+	  this.managerDropdownOptions = [];
+		this.selectedManagerId = '';
+		this.dropdownForm.get('managerId')?.setValue(null, { emitEvent: false });
       this.updateNodeMapCount();
 
       // ------------------ Pass cleaned state ------------------
@@ -173,72 +182,83 @@ if (!node || this.nodeMap.has(id)) return;
   }
 }
   /** ---------------- Add subtree in search scope ---------------- */
-private async addSubtreeInOrder(
+
+private async addSubtreeInOrderParallel(
   node: any,
   childrenMap: Map<string, any[]>,
   searchScope: Set<string>,
   loadChildren$: (node: any) => Observable<any[]>
-) {
+): Promise<void> {
+
   if (!node || !searchScope.has(node.id)) return;
- this.nodeMap.set(String(node.id), node);
-console.log("this.nodeMap.values()2:",this.nodeMap.values());
+
+  const nodeId = String(node.id);
+  this.nodeMap.set(nodeId, node);
+
   // Add node if missing
-  if (!this.chart['hasNode']?.(node.id)) {
+  if (!this.chart['hasNode']?.(nodeId)) {
     this.chart.addNodes([node]);
   }
 
-  // Load children if not already loaded
+  // 🔥 LOAD CHILDREN IN PARALLEL
   if (!node._loaded && node.hasChildren) {
+
     const children = await firstValueFrom(loadChildren$(node));
- //  children.forEach((c) => this.nodeMap.set(String(c.id), c));
-children.forEach((c) => {
-  const id = String(c.id);
-  if (!this.nodeMap.has(id)) {
-    this.nodeMap.set(id, c);
-  }
-});
-console.log("this.nodeMap.values()2:",this.nodeMap.values());
+
+    children.forEach((c) => {
+      const id = String(c.id);
+      if (!this.nodeMap.has(id)) {
+        this.nodeMap.set(id, c);
+      }
+    });
+
     node._loaded = true;
 
-    // Update childrenMap in case new nodes arrived
-    if (!childrenMap.has(node.id)) childrenMap.set(node.id, []);
-    children.forEach((c) => childrenMap.get(node.id)!.push(c));
+    if (!childrenMap.has(nodeId)) {
+      childrenMap.set(nodeId, []);
+    }
+
+    childrenMap.get(nodeId)!.push(...children);
   }
 
   node._expanded = true;
-  this.chart['setExpanded'](node.id);
+  this.chart['setExpanded'](nodeId);
 
-  const kids = childrenMap.get(node.id) ?? [];
+  const kids = childrenMap.get(nodeId) ?? [];
 
-  // Recursively expand children
-  for (const k of kids) {
-    await this.addSubtreeInOrder(k, childrenMap, searchScope, loadChildren$);
-  }
+  // 🔥 PARALLEL recursion instead of sequential await
+  await Promise.all(
+    kids.map(child =>
+      this.addSubtreeInOrderParallel(
+        child,
+        childrenMap,
+        searchScope,
+        loadChildren$
+      )
+    )
+  );
 }
-
   /** ---------------- Render chart ---------------- */
   private async render(state: ChartState) {
     const { root, highlightedIds, searchScope, ancestor, loadChildren$ } = state;
 if (highlightedIds?.size) {
   this.calculateDirectRelations(highlightedIds);
   this.populateManagerDropdown();
+  this.rebuildManagerDropdownOptions(); // ✅ NEW
+} else {
+  // no matches => hide dropdown and clear selection
+  this.managerDropdownOptions = [];
+  this.selectedManagerId = '';
+  this.dropdownForm.get('managerId')?.setValue(null, { emitEvent: false });
 }
 console.log("directSiblingsByManager:",this.directSiblingsByManager);
     if (!this.initialized) {
 		this.nodeMap = new Map<string, any>();
       this.chart
         ['container'](this.chartContainer.nativeElement)
-       //.nodeId((d: any) => d._key ?? d.id)
+      
 	   .nodeId((d: any) => d.id)
-		/*.parentNodeId((d: any) => {
-		  if (!d.parentId) return null;
-
-		  if (d.parentId === state.root.id) {
-			return state.root._key; // map to synthetic root
-		  }
-
-		  return d.parentId;
-		})*/
+	
 		.parentNodeId((d: any) => d.parentId ?? null)
         .hasChildren((d: any) => d.hasChildren)
        .loadChildren((d: any) =>
@@ -274,6 +294,10 @@ console.log("directSiblingsByManager:",this.directSiblingsByManager);
       .compactMarginPair((d:any) => 30)
       .neighbourMargin((a:any, b:any) => 20).afterUpdate(() => {
 		    const svg = this.chartContainer.nativeElement.querySelector('svg');
+			
+			// svg.setAttribute('width', String("100wh"));
+ // svg.setAttribute('height', String("100vh"));
+			
 			console.log("chartContainer_detected",svg);
 
   this.chart['fit']();
@@ -300,7 +324,7 @@ console.log("directSiblingsByManager:",this.directSiblingsByManager);
 
 	 this.chart
     ['nodeContent'](this.nodeContent(state))
-   // .data([root])  // 🔥 dynamic root
+  //  .data([root])  // 🔥 dynamic root
    .data(Array.from(this.nodeMap.values()))
     .render();
 	requestAnimationFrame(() => {
@@ -316,10 +340,16 @@ console.log("directSiblingsByManager:",this.directSiblingsByManager);
 		const childrenMap = this.buildSearchChildrenMap(searchScope);
 		const startNode = ancestor ?? root;
 		//await  this.addSubtreeInOrder(startNode, childrenMap, searchScope, loadChildren$);
-		this.updateNodeMapCount();
-		//const first = [...highlightedIds][0];
-		//if (first) this.chart['setCentered'](first);
-		//this.chart['render']();
+		 await this.addSubtreeInOrderParallel(
+    startNode,
+    childrenMap,
+    searchScope,
+    loadChildren$
+  );
+
+		
+		  this.chart['render']();
+			this.chart['fit']();
 	}
   }
 
@@ -333,98 +363,6 @@ private expandAllNodes() {
   this.chart['render']();
   this.chart['fit']();
 }
-private fitChartToContainer() {
-  const state = (this.chart as any).getChartState?.();
-  if (!state) return;
-
-  const svg = state.svg?.node();
-  const chartGroup = state.chart;
-
-  if (!svg || !chartGroup) return;
-
-  const containerRect =
-    this.chartContainer.nativeElement.getBoundingClientRect();
-
-  // 🔥 RESET ZOOM FIRST
-  d3.select(svg).call(
-    state.zoomBehavior.transform,
-    d3.zoomIdentity
-  );
-
-  // Wait one frame so reset applies
-  requestAnimationFrame(() => {
-
-    const bbox = chartGroup.node().getBBox();
-    if (!bbox.width || !bbox.height) return;
-
-    const scale = Math.min(
-      containerRect.width / bbox.width,
-      containerRect.height / bbox.height
-    );
-
-    const translateX =
-      (containerRect.width - bbox.width * scale) / 2 - bbox.x * scale;
-
-    const translateY =
-      (containerRect.height - bbox.height * scale) / 2 - bbox.y * scale;
-
-    d3.select(svg).call(
-      state.zoomBehavior.transform,
-      d3.zoomIdentity
-        .translate(translateX, translateY)
-        .scale(scale)
-    );
-  });
-}
-
-
-
-private autoFitToContainer() {
-  const container = this.chartContainer.nativeElement;
-  const svg: SVGSVGElement | null = container.querySelector('svg');
-  const chartGroup: SVGGElement | null = container.querySelector('g.chart');
-console.log("autoFitToContainer:", "chartGroup:",chartGroup, " svg:",svg);
-  if (!svg || !chartGroup) return;
-
-  // Get container size (CSS-controlled)
-  const containerWidth = container.clientWidth;
-  const containerHeight = container.clientHeight;
-
-  // Get actual tree bounding box
-  const bbox = chartGroup.getBBox();
-
-  if (!bbox.width || !bbox.height) return;
-
-  // Calculate scale to fit both width & height
-  const scaleX = containerWidth / bbox.width;
-  const scaleY = containerHeight / bbox.height;
-
-  const scale = Math.min(scaleX, scaleY);
-
-  // Centering offsets
-  const translateX =
-    (containerWidth - bbox.width * scale) / 2 - bbox.x * scale;
-
-  const translateY =
-    (containerHeight - bbox.height * scale) / 2 - bbox.y * scale;
-
-  chartGroup.setAttribute(
-    'transform',
-    `translate(${translateX}, ${translateY}) scale(${scale})`
-  );
-}
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 private populateManagerDropdown() {
@@ -437,18 +375,6 @@ private populateManagerDropdown() {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 get managerDropdownEntries(): [string, string][] {
   return Array.from(this.managerDropdownMap.entries());
@@ -549,6 +475,51 @@ async onManagerSelected(managerId: string) {
   this.chart['setCentered'](managerId);
   this.chart['fit']();
 }
+
+
+
+/*
++-------------------------------------------------------+
+|									======2_of_26======	|
+|	DROP DOWN HELPERS									|
+|														|
++-------------------------------------------------------+
+
+
+*/
+
+private rebuildManagerDropdownOptions() {
+  this.managerDropdownOptions = Array.from(this.managerDropdownMap.entries()).map(
+    ([id, name]) => ({ id, displayName: name })
+  );
+
+  // If current selection no longer exists, clear it
+  if (this.selectedManagerId && !this.managerDropdownMap.has(this.selectedManagerId)) {
+    this.selectedManagerId = '';
+    this.dropdownForm.get('managerId')?.setValue(null, { emitEvent: false });
+  }
+}
+
+onManagerDropdownSelect(item: { id: string; displayName: string }) {
+  const id = item?.id ?? '';
+  this.selectedManagerId = id;
+  // control is already set inside DropdownComponent, but calling the same flow is what you want
+  this.onManagerSelected(id);
+}
+
+clearManagerFilter() {
+  this.selectedManagerId = '';
+  this.dropdownForm.get('managerId')?.setValue(null);
+  this.onManagerSelected('');
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -659,83 +630,225 @@ exportPng(filename = 'org-chart.png') {
 }
 
   /** ---------------- Node content ---------------- */
-  private nodeContent(state: ChartState) {
-    const { searchScope, highlightedIds } = state;
 
-    return (d: any) => {
-      const show = !searchScope?.size || searchScope.has(d.data.id);
-      //if (!show) return '';
+private nodeContent(state: ChartState) {
+  const { searchScope, highlightedIds } = state;
 
-      const highlight = highlightedIds.has(d.data.id);
- const color = '#FFFFFF';
-        const imageDiffVert = 25 + 2;
-	  return `
-	   
-<div style='
-  width:${d.width}px;
-  height:${d.height}px;
-  padding-top:${imageDiffVert - 2}px;
-  padding-left:1px;
-  padding-right:1px;
-'>
-  <div style="
-    font-family: 'Inter', sans-serif;
-    background-color:${highlight ? '#fff8dc' : color};
-    margin-left:-1px;
-    width:${d.width - 2}px;
-    height:${d.height - imageDiffVert}px;
-    border-radius:10px;
-    border:2px solid ${highlight ? 'orange' : '#E4E2E9'};
-    box-shadow:${highlight ? '0 0 0 3px rgba(255,165,0,0.25)' : 'none'};
-    transition: all 0.2s ease;
-  ">
+  return (d: any) => {
+    const show = !searchScope?.size || searchScope.has(d.data.id);
+    // if (!show) return ''; // keep if you want hard-filter
+    const highlight = highlightedIds.has(d.data.id);
+	const genderRaw = d.data?.gender;
+	const gender = genderRaw ? genderRaw.toString().toLowerCase() : null;
 
-      <div style="display:flex;justify-content:flex-end;margin-top:5px;margin-right:8px">
-        #${d.data.id}
+	let genderIcon = '';
+	let avatarBorder = '2px dashed #cfc4b8'; // default dashed
+
+	if (gender === 'female') {
+	  genderIcon = './assets/icon_female.png';
+	} else if (gender === 'male') {
+	  genderIcon = './assets/icon_male.png';
+	} else {
+	  // unknown | null | undefined | anything else
+	  avatarBorder = '2px solid green';
+	}
+    // 🔹 Node type (fallback to managerial)
+    const type: string = 'managerial';
+    const fields = NODE_CARD_CONFIG[type] || [];
+
+    // 🔹 Dynamic fields rendering (RTL/LTR safe)
+    const renderedFields = fields
+      .map((field) => {
+        const rawValue = d.data[field.key];
+        if (rawValue === undefined || rawValue === null || rawValue === '') return '';
+
+        const value = field.format ? field.format(rawValue) : rawValue;
+
+        return `
+          <div style="
+            font-size:11px;
+            color:#5d5d5d;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            text-align:start;
+          ">
+            <bdi style="direction:inherit; unicode-bidi:plaintext;">
+              ${field.label ? `<span style="color:#716E7B">${field.label}: </span>` : ``}
+              <span>${value}</span>
+            </bdi>
+          </div>
+        `;
+      })
+      .join('');
+
+    const subCount =
+      d.data.subordinates ??
+      d.data.numberOfChildren ??
+      d.data.childrenCount ??
+      d.data.directReports ??
+      null;
+
+return `
+  <div
+    class="card"
+    aria-label="Employee card"
+    dir="rtl"
+    style="
+      --bg:#f5f3ef;
+      --card:#ffffff;
+      --ink:#1f1f1f;
+      --muted:#5d5d5d;
+      --accent:#d98c2b;
+      --ring:rgba(0,0,0,0.08);
+      --avatar-max:72px;
+
+      box-sizing:border-box;
+      width:${Math.min(300, d.width)}px;
+      max-width:300px;
+      max-height:${d.height}px;
+
+      background:var(--card);
+      border-radius:18px;
+      box-shadow:0 12px 30px var(--ring);
+      padding-inline:10px;
+      padding-block:10px;
+
+      display:grid;
+      grid-template-columns:minmax(0, var(--avatar-max)) 1fr;
+      gap:8px;
+      align-items:stretch;
+      overflow:hidden;
+
+      border:2px solid ${highlight ? 'var(--accent)' : 'transparent'};
+      box-shadow:${highlight ? '0 0 0 3px rgba(217,140,43,0.25), 0 12px 30px var(--ring)' : '0 12px 30px var(--ring)'};
+      transition:all 0.2s ease;
+    "
+  >
+    <div
+      class="avatar-box"
+      aria-hidden="true"
+      style="
+        padding-top:5px;
+        padding-bottom:5px;
+        padding-inline:5px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        width:100%;
+        aspect-ratio:1 / 1;
+        max-width:var(--avatar-max);
+        max-height:var(--avatar-max);
+        box-sizing:border-box;
+      "
+    >
+      <div
+        class="avatar"
+        style="
+          width:min(100%, 72px);
+          height:min(100%, 72px);
+          aspect-ratio:1 / 1;
+          border-radius:50%;
+          border:${avatarBorder};
+          background:linear-gradient(135deg,#f2e9df 0%,#f8f2eb 45%,#f2e9df 100%);
+          position:relative;
+          display:grid;
+          place-items:center;
+          overflow:hidden;
+          box-sizing:border-box;
+        "
+      >
+        ${
+          genderIcon
+            ? `
+              <img
+                src="${genderIcon}"
+                alt=""
+                style="
+                  width:100%;
+                  height:100%;
+                  display:block;
+                  object-fit:cover;
+                  border-radius:50%;
+                "
+              />
+            `
+            : ``
+        }
+      </div>
+    </div>
+
+    <div class="meta" style="display:grid; gap:6px; min-width:0;">
+      <div
+        class="name"
+        style="
+          font-size:15px;
+          font-weight:700;
+          letter-spacing:0.02em;
+          color:var(--ink);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+          text-align:start;
+        "
+      >
+        <bdi style="direction:inherit; unicode-bidi:plaintext;">
+          ${d.data.name || ''}
+        </bdi>
       </div>
 
-      <div style="
-        background-color:${highlight ? '#ffe7a3' : color};
-        margin-top:${-imageDiffVert - 20}px;
-        margin-left:15px;
-        border-radius:100px;
-        width:50px;
-        height:50px;
-      "></div>
-
-      <div style="margin-top:${-imageDiffVert - 20}px;">
-        <img 
-          src="${d.data.image}" 
-          style="margin-left:20px;border-radius:100px;width:40px;height:40px;" 
-        />
+      <div
+        class="role"
+        style="
+          font-size:11px;
+          color:var(--muted);
+          overflow:hidden;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+          text-align:start;
+        "
+      >
+        <bdi style="direction:inherit; unicode-bidi:plaintext;">
+          ${d.data.position || ''}
+        </bdi>
       </div>
 
-      <div style="
-        font-size:15px;
-        color:#08011E;
-        margin-left:20px;
-        margin-top:10px;
-        font-weight:${highlight ? '600' : '500'};
-      ">
-        ${d.data.name}
-      </div>
+      ${
+        subCount !== null && subCount !== undefined && subCount !== ''
+          ? `
+            <div
+              class="subordinates"
+              style="
+                font-size:11px;
+                color:var(--muted);
+                overflow:hidden;
+                text-overflow:ellipsis;
+                white-space:nowrap;
+                text-align:start;
+              "
+            >
+              <bdi style="direction:inherit; unicode-bidi:plaintext;">
+                Subordinates: ${subCount}
+              </bdi>
+            </div>
+          `
+          : ``
+      }
 
-      <div style="
-        color:#716E7B;
-        margin-left:20px;
-        margin-top:3px;
-        font-size:10px;
-      ">
-        ${d.data.position}
-      </div>
-
+      ${
+        renderedFields
+          ? `
+            <div class="badges" style="display:grid; gap:6px; justify-items:start; min-width:0;">
+              ${renderedFields}
+            </div>
+          `
+          : ``
+      }
+    </div>
   </div>
-</div>
-
-	  `;
-    };
-  }
-  
-  
+`;
+  };
+}
+ 
 }
 

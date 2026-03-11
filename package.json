@@ -33,8 +33,9 @@
     "@angular/compiler-cli": "^15.2.0",
 	 "@types/d3-flextree": "^2.1.4",
     "@types/dom-to-image": "^2.6.4",
-    "@types/jasmine": "~4.3.0",
-    "@types/moment": "^2.13.0",
+	 "@types/moment": "^2.13.0",
+   
+   
     "@types/jasmine": "~4.3.0",
     "jasmine-core": "~4.5.0",
     "karma": "~6.4.0",
